@@ -14,8 +14,8 @@ image voc_labels[20];
 
 void train_yolo(char *cfgfile, char *weightfile)
 {
-    char *train_images = "/data/voc/train.txt";
-    char *backup_directory = "/home/pjreddie/backup/";
+    char *train_images = "/home/busta/data/COCO/train.txt";
+    char *backup_directory = "/home/busta/backup/";
     srand(time(0));
     data_seed = time(0);
     char *base = basecfg(cfgfile);
@@ -232,7 +232,7 @@ void validate_yolo_recall(char *cfgfile, char *weightfile)
     srand(time(0));
 
     char *base = "results/comp4_det_test_";
-    list *plist = get_paths("data/voc.2007.test");
+    list *plist = get_paths("/home/busta/data/COCO/train.txt");
     char **paths = (char **)list_to_array(plist);
 
     layer l = net.layers[net.n-1];

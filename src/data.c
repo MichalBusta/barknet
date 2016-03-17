@@ -209,7 +209,11 @@ void fill_truth_region(char *path, float *truth, int classes, int num_boxes, int
         h =  boxes[i].h;
         id = boxes[i].id;
 
-        if (w < .01 || h < .01) continue;
+        if (w < .001 || h < .001)
+        {
+        	//printf("Too small box %s: %f, %f, %f, %f\n", labelpath, x, y, w, h);
+        	continue;
+        }
 
         int col = (int)(x*num_boxes);
         int row = (int)(y*num_boxes);

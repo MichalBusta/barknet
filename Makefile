@@ -1,8 +1,8 @@
-GPU=0
-OPENCV=0
+GPU=1
+OPENCV=1
 DEBUG=0
 
-ARCH= --gpu-architecture=compute_20 --gpu-code=compute_20
+ARCH= --gpu-architecture=compute_30 --gpu-code=compute_30
 
 VPATH=./src/
 EXEC=darknet
@@ -16,7 +16,7 @@ COMMON=
 CFLAGS=-Wall -Wfatal-errors 
 
 ifeq ($(DEBUG), 1) 
-OPTS=-O0 -g
+OPTS=-O1 -g
 endif
 
 CFLAGS+=$(OPTS)
@@ -25,7 +25,7 @@ ifeq ($(OPENCV), 1)
 COMMON+= -DOPENCV
 CFLAGS+= -DOPENCV
 LDFLAGS+= `pkg-config --libs opencv` 
-COMMON+= `pkg-config --cflags opencv` 
+COMMON+= `pkg-config --cflags opencv`
 endif
 
 ifeq ($(GPU), 1) 
