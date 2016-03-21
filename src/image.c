@@ -8,6 +8,7 @@
 #include "opencv2/core/core_c.h"
 #include "opencv2/highgui/highgui_c.h"
 #include "opencv2/imgproc/imgproc_c.h"
+#include "image_extra.h"
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -143,6 +144,42 @@ void draw_detections(image im, int num, float thresh, box *boxes, float **probs,
     }
 }
 
+void transpose_image(image im)
+{
+    assert(im.w == im.h);
+    int n, m;
+    int c;
+    for(c = 0; c < im.c; ++c){
+        for(n = 0; n < im.w-1; ++n){
+            for(m = n + 1; m < im.w; ++m){
+                float swap = im.data[m + im.w*(n + im.h*c)];
+                im.data[m + im.w*(n + im.h*c)] = im.data[n + im.w*(m + im.h*c)];
+                im.data[n + im.w*(m + im.h*c)] = swap;
+            }
+        }
+    }
+}
+
+void rotate_image_cw(image im, int times)
+{
+    assert(im.w == im.h);
+    times = (times + 400) % 4;
+    int i, x, y, c;
+    int n = im.w;
+    for(i = 0; i < times; ++i){
+        for(c = 0; c < im.c; ++c){
+            for(x = 0; x < n/2; ++x){
+                for(y = 0; y < (n-1)/2 + 1; ++y){
+                    float temp = im.data[y + im.w*(x + im.h*c)];
+                    im.data[y + im.w*(x + im.h*c)] = im.data[n-1-x + im.w*(y + im.h*c)];
+                    im.data[n-1-x + im.w*(y + im.h*c)] = im.data[n-1-y + im.w*(n-1-x + im.h*c)];
+                    im.data[n-1-y + im.w*(n-1-x + im.h*c)] = im.data[x + im.w*(n-1-y + im.h*c)];
+                    im.data[x + im.w*(n-1-y + im.h*c)] = temp;
+                }
+            }
+        }
+    }
+}
 
 void flip_image(image a)
 {
@@ -331,6 +368,16 @@ void save_image(image im, const char *name)
 }
 
 #ifdef OPENCV
+    image get_image_from_stream(CvCapture *cap)
+    {
+        IplImage* src = cvQueryFrame(cap);
+        image im = ipl_to_image(src);
+        rgbgr_image(im);
+        return im;
+    }
+#endif
+
+#ifdef OPENCV
 void save_image_jpg(image p, char *name)
 {
     image copy = copy_image(p);
@@ -459,6 +506,39 @@ image crop_image(image im, int dx, int dy, int w, int h)
     }
     return cropped;
 }
+
+    image resize_min(image im, int min)
+    {
+        int w = im.w;
+        int h = im.h;
+        if(w < h){
+            h = (h * min) / w;
+            w = min;
+        } else {
+            w = (w * min) / h;
+            h = min;
+        }
+        image resized = resize_image(im, w, h);
+        return resized;
+    }
+
+    image random_crop_image(image im, int low, int high, int size)
+    {
+        int r = rand_int(low, high);
+        image resized = resize_min(im, r);
+        int dx = rand_int(0, resized.w - size);
+        int dy = rand_int(0, resized.h - size);
+        image crop = crop_image(resized, dx, dy, size, size);
+
+        /*
+           show_image(im, "orig");
+           show_image(crop, "cropped");
+           cvWaitKey(0);
+         */
+
+        free_image(resized);
+        return crop;
+    }
 
 float three_way_max(float a, float b, float c)
 {
@@ -603,6 +683,17 @@ void scale_image_channel(image im, int c, float v)
     }
 }
 
+    image binarize_image(image im)
+    {
+        image c = copy_image(im);
+        int i;
+        for(i = 0; i < im.w * im.h * im.c; ++i){
+            if(c.data[i] > .5) c.data[i] = 1;
+            else c.data[i] = 0;
+        }
+        return c;
+    }
+
 void saturate_image(image im, float sat)
 {
     rgb_to_hsv(im);
@@ -725,6 +816,8 @@ void test_resize(char *filename)
     image exp5 = copy_image(im);
     exposure_image(exp5, .5);
 
+        image bin = binarize_image(im);
+
     #ifdef GPU
     image r = resize_image(im, im.w, im.h);
     image black = make_image(im.w*2 + 3, im.h*2 + 3, 9);
@@ -745,6 +838,7 @@ void test_resize(char *filename)
     #endif
 
     show_image(im, "Original");
+        show_image(bin,  "Binary");
     show_image(gray, "Gray");
     show_image(sat2, "Saturation-2");
     show_image(sat5, "Saturation-.5");
@@ -789,8 +883,12 @@ image load_image_cv(char *filename, int channels)
 
     if( (src = cvLoadImage(filename, flag)) == 0 )
     {
-        printf("Cannot load image \"%s\"\n", filename);
-        exit(0);
+            fprintf(stderr, "Cannot load image \"%s\"\n", filename);
+            char buff[256];
+            sprintf(buff, "echo %s >> bad.list", filename);
+            system(buff);
+            return make_image(10,10,3);
+            //exit(0);
     }
     image out = ipl_to_image(src);
     cvReleaseImage(&src);
@@ -964,6 +1062,14 @@ image collapse_images_horz(image *ims, int n)
     }
     return filters;
 } 
+
+    void show_image_normalized(image im, const char *name)
+    {
+        image c = copy_image(im);
+        normalize_image(c);
+        show_image(c, name);
+        free_image(c);
+    }
 
 void show_images(image *ims, int n, char *window)
 {
