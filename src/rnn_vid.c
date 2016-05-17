@@ -5,7 +5,6 @@
 #include "blas.h"
 
 #ifdef OPENCV
-#include "opencv2/highgui/highgui_c.h"
 #include "image_extra.h"
 
 void reconstruct_picture(network net, float *features, image recon, image update, float rate, float momentum, float lambda, int smooth_size, int iters);

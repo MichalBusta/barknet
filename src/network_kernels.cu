@@ -31,6 +31,7 @@ extern "C" {
 #include "route_layer.h"
 #include "shortcut_layer.h"
 #include "blas.h"
+#include "xnor_conv_layer.h"
 }
 
 float * get_network_output_gpu_layer(network net, int i);
@@ -80,6 +81,8 @@ void forward_network_gpu(network net, network_state state)
             forward_route_layer_gpu(l, net);
         } else if(l.type == SHORTCUT){
             forward_shortcut_layer_gpu(l, state);
+        } else if(l.type == XNOR_CONV){
+            forward_xnor_conv_layer_gpu(l, state);
         }
         state.input = l.output_gpu;
     }
@@ -133,6 +136,8 @@ void backward_network_gpu(network net, network_state state)
             backward_route_layer_gpu(l, net);
         } else if(l.type == SHORTCUT){
             backward_shortcut_layer_gpu(l, state);
+        }if(l.type == XNOR_CONV) {
+            backward_xnor_conv_layer_gpu(l, state);
         }
     }
 }

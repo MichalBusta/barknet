@@ -6,6 +6,7 @@
 #include "gemm.h"
 #include <stdio.h>
 #include <time.h>
+#include <assert.h>
 
 void swap_binary(convolutional_layer *l)
 {
@@ -33,6 +34,7 @@ void binarize_filters2(float *filters, int n, int size, char *binary, float *sca
         for(i = 0; i < size/8; ++i){
             binary[f*size + i] = (filters[f*size + i] > 0) ? 1 : 0;
             for(k = 0; k < 8; ++k){
+
             }
         }
     }
@@ -49,6 +51,7 @@ void binarize_filters(float *filters, int n, int size, float *binary)
         mean = mean / size;
         for(i = 0; i < size; ++i){
             binary[f*size + i] = (filters[f*size + i] > 0) ? mean : -mean;
+            assert(!isinf(binary[f*size + i]) );
         }
     }
 }
@@ -183,10 +186,10 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.output = calloc(l.batch*out_h * out_w * n, sizeof(float));
     l.delta  = calloc(l.batch*out_h * out_w * n, sizeof(float));
 
+    l.scales = calloc(n, sizeof(float));
     if(binary){
         l.binary_filters = calloc(c*n*size*size, sizeof(float));
-        l.cfilters = calloc(c*n*size*size, sizeof(char));
-        l.scales = calloc(n, sizeof(float));
+        //l.cfilters = calloc(c*n*size*size, sizeof(char));
     }
 
     if(batch_normalize){
@@ -343,6 +346,8 @@ void backward_bias(float *bias_updates, float *delta, int batch, int n, int size
     }
 }
 
+//#define VERBOSE_T
+
 void forward_convolutional_layer(convolutional_layer l, network_state state)
 {
     int out_h = convolutional_out_height(l);
@@ -350,35 +355,15 @@ void forward_convolutional_layer(convolutional_layer l, network_state state)
     int i;
 
     fill_cpu(l.outputs*l.batch, 0, l.output, 1);
-    /*
-    if(l.binary){
-        binarize_filters(l.filters, l.n, l.c*l.size*l.size, l.binary_filters);
-        binarize_filters2(l.filters, l.n, l.c*l.size*l.size, l.cfilters, l.scales);
+
+    if(l.binary) {
+        binarize_filters(l.filters, l.n, l.c * l.size * l.size, l.binary_filters);
+        //binarize_filters2(l.filters, l.n, l.c*l.size*l.size, l.cfilters, l.scales);
         swap_binary(&l);
     }
-    */
-
-    if(l.binary){
-        int m = l.n;
-        int k = l.size*l.size*l.c;
-        int n = out_h*out_w;
-
-        char  *a = l.cfilters;
-        float *b = l.col_image;
-        float *c = l.output;
-
-        for(i = 0; i < l.batch; ++i){
-            im2col_cpu(state.input, l.c, l.h, l.w, 
-                    l.size, l.stride, l.pad, b);
-            gemm_bin(m,n,k,1,a,k,b,n,c,n);
-            c += n*m;
-            state.input += l.c*l.h*l.w;
-        }
-        scale_bias(l.output, l.scales, l.batch, l.n, out_h*out_w);
-        add_bias(l.output, l.biases, l.batch, l.n, out_h*out_w);
-        activate_array(l.output, m*n*l.batch, l.activation);
-        return;
-    }
+#ifdef VERBOSE_T
+    clock_t time=clock();
+#endif
 
     int m = l.n;
     int k = l.size*l.size*l.c;
@@ -391,7 +376,12 @@ void forward_convolutional_layer(convolutional_layer l, network_state state)
     for(i = 0; i < l.batch; ++i){
         im2col_cpu(state.input, l.c, l.h, l.w, 
                 l.size, l.stride, l.pad, b);
-        gemm(0,0,m,n,k,1,a,k,b,n,1,c,n);
+        if(l.binary) {
+            gemm_bin(m, n, k, a, k, b, n, c, n);
+            //gemm(0,0,m,n,k,1,a,k,b,n,1,c,n);
+        }
+        else
+            gemm(0,0,m,n,k,1,a,k,b,n,1,c,n);
         c += n*m;
         state.input += l.c*l.h*l.w;
     }
@@ -406,9 +396,14 @@ void forward_convolutional_layer(convolutional_layer l, network_state state)
         }
         scale_bias(l.output, l.scales, l.batch, l.n, out_h*out_w);
     }
-    add_bias(l.output, l.biases, l.batch, l.n, out_h*out_w);
+#ifdef VERBOSE_T
+    printf("CO: %lf sec\n", sec(clock()-time));
+#endif
 
+    add_bias(l.output, l.biases, l.batch, l.n, out_h*out_w);
     activate_array(l.output, m*n*l.batch, l.activation);
+
+    if(l.binary) swap_binary(&l);
 }
 
 void backward_convolutional_layer(convolutional_layer l, network_state state)
@@ -434,6 +429,7 @@ void backward_convolutional_layer(convolutional_layer l, network_state state)
         gemm(0,1,m,n,k,1,a,k,b,k,1,c,n);
 
         if(state.delta){
+            if(l.binary) swap_binary(&l);
             a = l.filters;
             b = l.delta + i*m*k;
             c = l.col_image;
@@ -441,6 +437,7 @@ void backward_convolutional_layer(convolutional_layer l, network_state state)
             gemm(1,0,n,k,m,1,a,n,b,k,0,c,k);
 
             col2im_cpu(l.col_image, l.c,  l.h,  l.w,  l.size,  l.stride, l.pad, state.delta+i*l.c*l.h*l.w);
+            if(l.binary) swap_binary(&l);
         }
     }
 }

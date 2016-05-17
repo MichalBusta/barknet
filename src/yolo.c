@@ -52,6 +52,7 @@ void train_yolo(char *cfgfile, char *weightfile)
     args.num_boxes = side;
     args.d = &buffer;
     args.type = REGION_DATA;
+    args.sqrt = l.sqrt;
 
     pthread_t load_thread = load_data_in_thread(args);
     clock_t time;
@@ -71,7 +72,7 @@ void train_yolo(char *cfgfile, char *weightfile)
         avg_loss = avg_loss*.9 + loss*.1;
 
         printf("%d: %f, %f avg, %f rate, %lf seconds, %d images\n", i, loss, avg_loss, get_current_rate(net), sec(clock()-time), i*imgs);
-        if(i%1000==0 || i == 600){
+        if(i%20==0){
             char buff[256];
             sprintf(buff, "%s/%s_%d.weights", backup_directory, base, i);
             save_weights(net, buff);
@@ -87,6 +88,7 @@ void convert_yolo_detections(float *predictions, int classes, int num, int squar
 {
     int i,j,n;
     //int per_cell = 5*num+classes;
+    printf("Side: %d, num: %d, squere: %d\n", side, num, square);
     for (i = 0; i < side*side; ++i){
         int row = i / side;
         int col = i % side;
@@ -344,7 +346,7 @@ void test_yolo(char *cfgfile, char *weightfile, char *filename, float thresh)
         convert_yolo_detections(predictions, l.classes, l.n, l.sqrt, l.side, 1, 1, thresh, probs, boxes, 0);
         if (nms) do_nms_sort(boxes, probs, l.side*l.side*l.n, l.classes, nms);
         //draw_detections(im, l.side*l.side*l.n, thresh, boxes, probs, voc_names, voc_labels, 20);
-        draw_detections(im, l.side*l.side*l.n, thresh, boxes, probs, voc_names, 0, 20);
+        draw_detections(im, l.side*l.side*l.n, thresh, boxes, probs, voc_names, 0, l.classes);
         show_image(im, "predictions");
         save_image(im, "predictions");
 

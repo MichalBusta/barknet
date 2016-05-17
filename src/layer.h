@@ -23,7 +23,8 @@ typedef enum {
     SHORTCUT,
     ACTIVE,
     RNN,
-    CRNN
+    CRNN,
+	XNOR_CONV
 } LAYER_TYPE;
 
 typedef enum{
@@ -95,6 +96,15 @@ struct layer{
     char  *cfilters;
     float *filter_updates;
     float *state;
+
+    //xnor ------------
+    float *a_norm;
+    float *filters_norm;
+    float *mean_input;
+    float *c_scales;
+    float *c_norm;
+    unsigned int* filters_concat;
+    //xnor ------------
 
     float *binary_filters;
 

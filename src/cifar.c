@@ -21,7 +21,7 @@ void train_cifar(char *cfgfile, char *weightfile)
     }
     printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net.learning_rate, net.momentum, net.decay);
 
-    char *backup_directory = "/home/pjreddie/backup/";
+    char *backup_directory = "/home/busta/backup/";
     int classes = 10;
     int N = 50000;
 

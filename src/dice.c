@@ -27,7 +27,7 @@ void train_dice(char *cfgfile, char *weightfile)
     while(1){
         ++i;
         time=clock();
-        data train = load_data(paths, imgs, plist->size, labels, 6, net.w, net.h);
+        data train = load_data(paths, imgs, plist->size, labels, 6, net.w, net.h, net.c);
         printf("Loaded: %lf seconds\n", sec(clock()-time));
 
         time=clock();
@@ -60,7 +60,7 @@ void validate_dice(char *filename, char *weightfile)
     int m = plist->size;
     free_list(plist);
 
-    data val = load_data(paths, m, 0, labels, 6, net.w, net.h);
+    data val = load_data(paths, m, 0, labels, 6, net.w, net.h, net.c);
     float *acc = network_accuracies(net, val, 2);
     printf("Validation Accuracy: %f, %d images\n", acc[0], m);
     free_data(val);

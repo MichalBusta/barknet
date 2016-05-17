@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 char *get_activation_string(ACTIVATION a)
 {
@@ -117,6 +118,7 @@ void gradient_array(const float *x, const int n, const ACTIVATION a, float *delt
     int i;
     for(i = 0; i < n; ++i){
         delta[i] *= gradient(x[i], a);
+        assert(!isnan(delta[i]));
     }
 } 
 

@@ -6,7 +6,6 @@
 #include <sys/time.h>
 
 #ifdef OPENCV
-#include "opencv2/highgui/highgui_c.h"
 #include "image_extra.h"
 #endif
 
@@ -50,7 +49,7 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile)
         load_weights(&net, weightfile);
     }
     printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net.learning_rate, net.momentum, net.decay);
-    int imgs = 1024;
+    int imgs = 64;
 
     list *options = read_data_cfg(datacfg);
 
@@ -72,6 +71,7 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile)
     load_args args = {0};
     args.w = net.w;
     args.h = net.h;
+    args.c = net.c;
 
     args.min = net.w;
     args.max = net.max_crop;
@@ -84,6 +84,7 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile)
     args.labels = labels;
     args.d = &buffer;
     args.type = CLASSIFICATION_DATA;
+    args.type = OLD_CLASSIFICATION_DATA;
 
     load_thread = load_data_in_thread(args);
     int epoch = (*net.seen)/N;
@@ -93,7 +94,7 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile)
         train = buffer;
 
         load_thread = load_data_in_thread(args);
-        printf("Loaded: %lf seconds\n", sec(clock()-time));
+        //printf("Loaded: %lf seconds\n", sec(clock()-time));
         time=clock();
 
 /*
@@ -108,17 +109,13 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile)
         float loss = train_network(net, train);
         if(avg_loss == -1) avg_loss = loss;
         avg_loss = avg_loss*.9 + loss*.1;
-        printf("%d, %.3f: %f, %f avg, %f rate, %lf seconds, %d images\n", get_current_batch(net), (float)(*net.seen)/N, loss, avg_loss, get_current_rate(net), sec(clock()-time), *net.seen);
+        if( get_current_batch(net) % 10 == 0)
+        	printf("%d, %.3f: %f, %f avg, %f rate, %lf seconds, %d images\n", get_current_batch(net), (float)(*net.seen)/N, loss, avg_loss, get_current_rate(net), sec(clock()-time), *net.seen);
         free_data(train);
-        if(*net.seen/N > epoch){
+        if(get_current_batch(net) % 100 == 0){
             epoch = *net.seen/N;
             char buff[256];
             sprintf(buff, "%s/%s_%d.weights",backup_directory,base, epoch);
-            save_weights(net, buff);
-        }
-        if(*net.seen%100 == 0){
-            char buff[256];
-            sprintf(buff, "%s/%s.backup",backup_directory,base);
             save_weights(net, buff);
         }
     }
@@ -387,7 +384,6 @@ void validate_classifier_single(char *datacfg, char *filename, char *weightfile)
         for(j = 0; j < topk; ++j){
             if(indexes[j] == class) avg_topk += 1;
         }
-
         printf("%d: top 1: %f, top %d: %f\n", i, avg_acc/(i+1), topk, avg_topk/(i+1));
     }
 }

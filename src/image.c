@@ -5,9 +5,6 @@
 #include <math.h>
 
 #ifdef OPENCV
-#include "opencv2/core/core_c.h"
-#include "opencv2/highgui/highgui_c.h"
-#include "opencv2/imgproc/imgproc_c.h"
 #include "image_extra.h"
 #endif
 
@@ -892,7 +889,8 @@ image load_image_cv(char *filename, int channels)
     }
     image out = ipl_to_image(src);
     cvReleaseImage(&src);
-    rgbgr_image(out);
+    if( channels == 3 )
+    	rgbgr_image(out);
     return out;
 }
 

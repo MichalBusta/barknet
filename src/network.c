@@ -23,6 +23,7 @@
 #include "dropout_layer.h"
 #include "route_layer.h"
 #include "shortcut_layer.h"
+#include "xnor_conv_layer.h"
 
 int get_current_batch(network net)
 {
@@ -108,6 +109,8 @@ char *get_layer_string(LAYER_TYPE a)
             return "shortcut";
         case NORMALIZATION:
             return "normalization";
+        case XNOR_CONV:
+        	return "xnor-conv";
         default:
             break;
     }
@@ -170,6 +173,8 @@ void forward_network(network net, network_state state)
             forward_route_layer(l, net);
         } else if(l.type == SHORTCUT){
             forward_shortcut_layer(l, state);
+        } else if(l.type == XNOR_CONV){
+        	forward_xnor_conv_layer(l, state);
         }
         state.input = l.output;
     }
@@ -194,6 +199,8 @@ void update_network(network net)
             update_crnn_layer(l, update_batch, rate, net.momentum, net.decay);
         } else if(l.type == LOCAL){
             update_local_layer(l, update_batch, rate, net.momentum, net.decay);
+        }else if(l.type == XNOR_CONV){
+        	update_xnor_conv_layer(l, update_batch, rate, net.momentum, net.decay);
         }
     }
 }
@@ -278,6 +285,8 @@ void backward_network(network net, network_state state)
             backward_route_layer(l, net);
         } else if(l.type == SHORTCUT){
             backward_shortcut_layer(l, state);
+        } else if(l.type == XNOR_CONV){
+        	backward_xnor_conv_layer(l, state);
         }
     }
 }
@@ -395,6 +404,8 @@ int resize_network(network *net, int w, int h)
             resize_normalization_layer(&l, w, h);
         }else if(l.type == COST){
             resize_cost_layer(&l, inputs);
+        }else if(l.type == XNOR_CONV){
+        	resize_xnor_conv_layer(&l, w, h);
         }else{
             error("Cannot resize this type of layer");
         }

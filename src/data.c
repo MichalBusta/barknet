@@ -29,7 +29,7 @@ char **get_random_paths(char **paths, int n, int m)
     for(i = 0; i < n; ++i){
         int index = rand_r(&data_seed)%m;
         random_paths[i] = paths[index];
-        if(i == 0) printf("%s\n", paths[index]);
+        //if(i == 0) printf("%s\n", paths[index]);
     }
     return random_paths;
 }
@@ -66,7 +66,7 @@ matrix load_image_paths_gray(char **paths, int n, int w, int h)
     return X;
 }
 
-matrix load_image_paths(char **paths, int n, int w, int h)
+matrix load_image_paths(char **paths, int n, int w, int h, int c)
 {
     int i;
     matrix X;
@@ -75,7 +75,7 @@ matrix load_image_paths(char **paths, int n, int w, int h)
     X.cols = 0;
 
     for(i = 0; i < n; ++i){
-        image im = load_image_color(paths[i], w, h);
+        image im = load_image(paths[i], w, h, c);
         X.vals[i] = im.data;
         X.cols = im.h*im.w*im.c;
     }
@@ -235,7 +235,7 @@ void fill_truth_region(char *path, float *truth, int classes, int num_boxes, int
         h =  boxes[i].h;
         id = boxes[i].id;
 
-        if (w < .001 || h < .001)
+        if (w < .01 || h < .01)
         {
         	//printf("Too small box %s: %f, %f, %f, %f\n", labelpath, x, y, w, h);
         	continue;
@@ -262,7 +262,8 @@ void fill_truth_region(char *path, float *truth, int classes, int num_boxes, int
     free(boxes);
 }
 
-void fill_truth_detection(char *path, float *truth, int classes, int num_boxes, int flip, int background, float dx, float dy, float sx, float sy)
+void fill_truth_detection(char *path, float *truth, int classes, int num_boxes, int flip, int background,
+		float dx, float dy, float sx, float sy, int sqrt)
 {
     char *labelpath = find_replace(path, "JPEGImages", "labels");
     labelpath = find_replace(labelpath, ".jpg", ".txt");
@@ -319,8 +320,8 @@ void fill_truth_detection(char *path, float *truth, int classes, int num_boxes, 
 
         w = constrain(0, 1, w);
         h = constrain(0, 1, h);
-        if (w < .01 || h < .01) continue;
-        if(1){
+        if (w < .005 || h < .005) continue;
+        if(sqrt){
             w = pow(w, 1./2.);
             h = pow(h, 1./2.);
         }
@@ -370,7 +371,7 @@ data load_data_captcha(char **paths, int n, int m, int k, int w, int h)
     if(m) paths = get_random_paths(paths, n, m);
     data d;
     d.shallow = 0;
-    d.X = load_image_paths(paths, n, w, h);
+    d.X = load_image_paths(paths, n, w, h, 3);
     d.y = make_matrix(n, k*NUMCHARS);
     int i;
     for(i = 0; i < n; ++i){
@@ -385,7 +386,7 @@ data load_data_captcha_encode(char **paths, int n, int m, int w, int h)
     if(m) paths = get_random_paths(paths, n, m);
     data d;
     d.shallow = 0;
-    d.X = load_image_paths(paths, n, w, h);
+    d.X = load_image_paths(paths, n, w, h, 3);
     d.X.cols = 17100;
     d.y = d.X;
     if(m) free(paths);
@@ -629,7 +630,7 @@ data load_data_swag(char **paths, int n, int classes, float jitter)
     return d;
 }
 
-data load_data_detection(int n, char **paths, int m, int classes, int w, int h, int num_boxes, int background)
+data load_data_detection(int n, char **paths, int m, int classes, int w, int h, int num_boxes, int background, int sqrt)
 {
     char **random_paths = get_random_paths(paths, n, m);
     int i;
@@ -679,7 +680,7 @@ data load_data_detection(int n, char **paths, int m, int classes, int w, int h, 
         if(flip) flip_image(sized);
         d.X.vals[i] = sized.data;
 
-        fill_truth_detection(random_paths[i], d.y.vals[i], classes, num_boxes, flip, background, dx, dy, 1./sx, 1./sy);
+        fill_truth_detection(random_paths[i], d.y.vals[i], classes, num_boxes, flip, background, dx, dy, 1./sx, 1./sy, sqrt);
 
         free_image(orig);
         free_image(cropped);
@@ -699,11 +700,11 @@ void *load_thread(void *ptr)
     //printf("Loading data: %d\n", rand_r(&data_seed));
     load_args a = *(struct load_args*)ptr;
     if (a.type == OLD_CLASSIFICATION_DATA){
-        *a.d = load_data(a.paths, a.n, a.m, a.labels, a.classes, a.w, a.h);
+        *a.d = load_data(a.paths, a.n, a.m, a.labels, a.classes, a.w, a.h, a.c);
     } else if (a.type == CLASSIFICATION_DATA){
         *a.d = load_data_augment(a.paths, a.n, a.m, a.labels, a.classes, a.min, a.max, a.size);
     } else if (a.type == DETECTION_DATA){
-        *a.d = load_data_detection(a.n, a.paths, a.m, a.classes, a.w, a.h, a.num_boxes, a.background);
+        *a.d = load_data_detection(a.n, a.paths, a.m, a.classes, a.w, a.h, a.num_boxes, a.background, a.sqrt);
     } else if (a.type == WRITING_DATA){
         *a.d = load_data_writing(a.paths, a.n, a.m, a.w, a.h, a.out_w, a.out_h);
     } else if (a.type == REGION_DATA){
@@ -738,7 +739,7 @@ data load_data_writing(char **paths, int n, int m, int w, int h, int out_w, int 
     char **replace_paths = find_replace_paths(paths, n, ".png", "-label.png");
     data d;
     d.shallow = 0;
-    d.X = load_image_paths(paths, n, w, h);
+    d.X = load_image_paths(paths, n, w, h, 3);
     d.y = load_image_paths_gray(replace_paths, n, out_w, out_h);
     if(m) free(paths);
     int i;
@@ -747,12 +748,12 @@ data load_data_writing(char **paths, int n, int m, int w, int h, int out_w, int 
     return d;
 }
 
-data load_data(char **paths, int n, int m, char **labels, int k, int w, int h)
+data load_data(char **paths, int n, int m, char **labels, int k, int w, int h, int c)
 {
     if(m) paths = get_random_paths(paths, n, m);
     data d;
     d.shallow = 0;
-    d.X = load_image_paths(paths, n, w, h);
+    d.X = load_image_paths(paths, n, w, h, c);
     d.y = load_labels_paths(paths, n, labels, k);
     if(m) free(paths);
     return d;

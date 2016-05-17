@@ -39,7 +39,7 @@ void *fetch_in_thread(void *ptr)
 void *detect_in_thread(void *ptr)
 {
     float nms = .4;
-
+    clock_t timeg=clock();
     detection_layer l = net.layers[net.n-1];
     float *X = det_s.data;
     float *predictions = network_predict(net, X);
@@ -50,6 +50,7 @@ void *detect_in_thread(void *ptr)
     printf("\033[1;1H");
     printf("\nFPS:%.0f\n",fps);
     printf("Objects:\n\n");
+    printf("time: %f\n", sec(clock()-timeg));
     draw_detections(det, l.side*l.side*l.n, demo_thresh, boxes, probs, voc_names, voc_labels, 20);
     return 0;
 }
@@ -103,7 +104,7 @@ void demo_yolo(char *cfgfile, char *weightfile, float thresh, int cam_index, cha
         if(pthread_create(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed");
         show_image(disp, "YOLO");
         free_image(disp);
-        cvWaitKey(1);
+
         pthread_join(fetch_thread, 0);
         pthread_join(detect_thread, 0);
 
@@ -115,6 +116,7 @@ void demo_yolo(char *cfgfile, char *weightfile, float thresh, int cam_index, cha
         timersub(&tval_after, &tval_before, &tval_result);
         float curr = 1000000.f/((long int)tval_result.tv_usec);
         fps = .9*fps + .1*curr;
+        cvWaitKey(1);
     }
 }
 #else

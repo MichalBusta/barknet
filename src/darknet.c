@@ -1,6 +1,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <opencv2/core/fast_math.hpp>
 
 #include "parser.h"
 #include "utils.h"

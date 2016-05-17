@@ -12,8 +12,11 @@ opencv/
 convnet/
 decaf/
 submission/
-cfg/
 darknet
+.settings
+.project
+.cproject
+.pydevproject
 
 # OS Generated #
 .DS_Store*
