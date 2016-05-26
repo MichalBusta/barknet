@@ -5,6 +5,7 @@
 #include "blas.h"
 #include "classifier.h"
 #include <sys/time.h>
+#include "image_extra.h"
 
 #ifdef OPENCV
 #include "opencv2/highgui/highgui_c.h"

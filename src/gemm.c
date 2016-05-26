@@ -11,7 +11,6 @@ void gemm_bin(int M, int N, int K,
         float *C, int ldc)
 {
     int i,j,k;
-    //#pragma omp parallel for
     for(i = 0; i < M; ++i){
         for(k = 0; k < K; ++k){
             register float A_PART = A[i*lda+k];
@@ -86,7 +85,6 @@ void gemm_nn(int M, int N, int K, float ALPHA,
         float *C, int ldc)
 {
     int i,j,k;
-    //#pragma omp parallel for
     for(i = 0; i < M; ++i){
         for(k = 0; k < K; ++k){
             register float A_PART = ALPHA*A[i*lda+k];
@@ -103,7 +101,6 @@ void gemm_nt(int M, int N, int K, float ALPHA,
         float *C, int ldc)
 {
     int i,j,k;
-    #pragma omp parallel for
     for(i = 0; i < M; ++i){
         for(j = 0; j < N; ++j){
             register float sum = 0;
@@ -121,7 +118,6 @@ void gemm_tn(int M, int N, int K, float ALPHA,
         float *C, int ldc)
 {
     int i,j,k;
-    #pragma omp parallel for
     for(i = 0; i < M; ++i){
         for(k = 0; k < K; ++k){
             register float A_PART = ALPHA*A[k*lda+i];
@@ -138,7 +134,6 @@ void gemm_tt(int M, int N, int K, float ALPHA,
         float *C, int ldc)
 {
     int i,j,k;
-    #pragma omp parallel for
     for(i = 0; i < M; ++i){
         for(j = 0; j < N; ++j){
             register float sum = 0;

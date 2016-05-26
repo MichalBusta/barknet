@@ -13,6 +13,9 @@ typedef layer xnor_conv_layer;
 
 void forward_xnor_conv_layer_gpu(xnor_conv_layer l, network_state state);
 void backward_xnor_conv_layer_gpu(xnor_conv_layer l, network_state state);
+void update_xnor_conv_layer_gpu(convolutional_layer layer, int batch, float learning_rate, float momentum, float decay);
+
+void concatenate_rows_gpu(float *a, unsigned int *b, int rows, int cols);
 
 #endif
 

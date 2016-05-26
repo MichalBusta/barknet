@@ -79,6 +79,15 @@ void concatenate_rows_kernel_cpu(float *a, unsigned int *b, int rows, int cols)
 
 }
 
+inline unsigned int bitcount32(unsigned int i) {
+
+    //Parallel binary bit add
+    i = i - ((i >> 1) & 0x55555555);
+    i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
+    return (((i + (i >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
+
+}
+
 void xnor_gemm_impl(unsigned int* A, unsigned int* B, float* C, int m, int n, int k, int count)
 {
 	for (int celly = 0; celly < m; ++celly)
@@ -89,7 +98,7 @@ void xnor_gemm_impl(unsigned int* A, unsigned int* B, float* C, int m, int n, in
 			for (int x = 0; x < k; x++)
 			{
 				Cvalue += __builtin_popcount(A[celly * k + x]^B[cellx + x * n]);
-                //Cvalue += _mm_popcnt_u32(A[celly * k + x]^B[cellx + x * n]);
+                //Cvalue += bitcount32(A[celly * k + x]^B[cellx + x * n]);
 			}
 			// Write Csub to device memory
 			// Each thread writes one element
@@ -106,26 +115,32 @@ void gemm_bin2(int M, int N, int K,
               float *C, int ldc)
 {
     int i,j,k;
-    //#pragma omp parallel for
     for(i = 0; i < M; ++i){
         for(k = 0; k < K; ++k){
             register float A_PART = A[i*lda+k];
             if( A_PART > 0)
             {
                 for(j = 0; j < N; ++j) {
+                    assert(B[k * ldb + j] <= 1);
+                    C[i * ldc + j] += B[k * ldb + j];
+                    /*
                     if( B[k * ldb + j] > 0 )
                         C[i * ldc + j] += 1;
                     else
                         C[i * ldc + j] -= 1;
+                    */
                 }
             }else
             {
+                assert(B[k * ldb + j] <= 1);
+                C[i * ldc + j] += B[k * ldb + j];
+                /*
                 for(j = 0; j < N; ++j) {
                     if( B[k * ldb + j] > 0 )
                         C[i * ldc + j] -= 1;
                     else
                         C[i * ldc + j] += 1;
-                }
+                }*/
             }
         }
     }
@@ -199,7 +214,7 @@ void test_gemm_conct(int m, int n, int k)
 }
 
 //#define VERBOSE_T
-//#define NUMERIC_TEST 1
+#define NUMERIC_TEST 1
 /**
  * A is shape (m,k), B is shape (k,n) and C is shape (m,n)
  */
@@ -219,18 +234,6 @@ void xnor_gemm_concat(unsigned int* AT, float* B, float* C, int m, int n, int k)
 
 #ifdef VERBOSE_T
     printf(" gemmimpl: %lf sec\n", sec(clock()-timeg));
-#endif
-#ifdef NUMERIC_TEST
-    float* c_check = calloc( m  * n, sizeof(float));
-    gemm_bin2(m, n, k, A, k, B, n, c_check, n);
-    for(int i = 0; i < m; i++ ){
-        for(int j = 0; j < n; j++) {
-            if (c_check[i * n + j] != C[i * n + j]) {
-                printf("%d %d, %f, %f\n", i, j, c_check[i * n + j], C[i * n + j]);
-            }
-            assert(c_check[i * n + j] == C[i * n + j]);
-        }
-    }
 #endif
     free(bt);
 }

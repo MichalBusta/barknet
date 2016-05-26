@@ -163,6 +163,8 @@ void update_network_gpu(network net)
         layer l = net.layers[i];
         if(l.type == CONVOLUTIONAL){
             update_convolutional_layer_gpu(l, update_batch, rate, net.momentum, net.decay);
+        } else if(l.type == XNOR_CONV){
+            update_xnor_conv_layer_gpu(l, update_batch, rate, net.momentum, net.decay);
         } else if(l.type == DECONVOLUTIONAL){
             update_deconvolutional_layer_gpu(l, rate, net.momentum, net.decay);
         } else if(l.type == CONNECTED){

@@ -59,21 +59,10 @@ xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int 
     l.cfilters = calloc(c*n*size*size, sizeof(char));
     l.scales = calloc(n, sizeof(float));
 
-    l.mean_input = malloc(l.h * l.w * sizeof(float));
     int k = l.size*l.size*l.c;
     int k_red = k / 32;
     if( k > k_red * 32 )
-        k += 1;
-    l.filters_concat = calloc( n  * k_red, sizeof(unsigned int));
-
-    l.c_scales = malloc(l.h * l.w*l.size*l.size*sizeof(float));
-    l.c_norm= calloc(out_w * out_h, sizeof(float));
-
-    l.filters_norm = malloc(n*l.size*l.size*sizeof(float));
-    float fact = 1.0f / (l.size*l.size);
-    for(int i = 0; i < n*l.size*l.size; i++){
-        l.filters_norm[i] = fact;
-    }
+        k_red += 1;
 
     l.scales = calloc(n, sizeof(float));
     if(batch_normalize){
@@ -89,6 +78,7 @@ xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int 
         l.rolling_variance = calloc(n, sizeof(float));
     }
 
+    int kpad = l.size / 2;
 #ifdef GPU
     l.filters_gpu = cuda_make_array(l.filters, c*n*size*size);
     l.filter_updates_gpu = cuda_make_array(l.filter_updates, c*n*size*size);
@@ -105,6 +95,22 @@ xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int 
 
     l.binary_filters_gpu = cuda_make_array(l.filters, c*n*size*size);
 
+    //xnor
+    cudaError_t status = cudaMalloc((void **)&l.mean_input, ( l.h + 2 *  kpad )*(l.w + 2 * kpad) * sizeof(float));
+    check_error(status);
+    status = cudaMalloc((void **)&l.c_scales, out_h * out_w * size* size * sizeof(float));
+    check_error(status);
+    status = cudaMalloc((void **)&l.c_norm, out_w * out_h  * sizeof(float));
+    check_error(status);
+    status = cudaMalloc((void **)&l.filters_norm, n*l.size*l.size*sizeof(float));
+    check_error(status);
+    float fact = 1.0f / (l.size*l.size);
+    fill_ongpu(n*l.size*l.size, fact, l.filters_norm, 1);
+    status = cudaMalloc((void **)&l.filters_concat, n  * k_red * sizeof(unsigned int));
+    check_error(status);
+
+    //xnor
+
     if(batch_normalize){
         l.mean_gpu = cuda_make_array(l.mean, n);
         l.variance_gpu = cuda_make_array(l.variance, n);
@@ -118,6 +124,19 @@ xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int 
         l.x_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
         l.x_norm_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
     }
+#else
+    l.mean_input = calloc(( l.h + 2 *  kpad ) * (l.w + 2 * kpad), sizeof(float));
+    l.c_scales = malloc(out_h * out_w * size* size *sizeof(float));
+    l.c_norm= calloc(out_w * out_h, sizeof(float));
+
+    l.filters_norm = malloc(n*l.size*l.size*sizeof(float));
+    float fact = 1.0f / (l.size*l.size);
+    for(int i = 0; i < n*l.size*l.size; i++){
+        l.filters_norm[i] = fact;
+    }
+
+    l.filters_concat = calloc( n  * k_red, sizeof(unsigned int));
+
 #endif
     l.activation = activation;
 
@@ -127,7 +146,8 @@ xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int 
 }
 
 //#define VERBOSE_T
-//#define VIS
+//#define NUMERIC_TEST 1
+#define VIS 1
 
 void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
 {
@@ -157,6 +177,9 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
     float *b = l.col_image;
     float *c = l.output;
 
+    int k_pad = 0;
+    if(l.pad)
+        k_pad = l.size / 2;
     for(i = 0; i < l.batch; ++i){
         #pragma omp parallel for
         for(int row = 0; row < l.h; row++){
@@ -166,20 +189,25 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
                     mean += fabs(state.input[(row + c * l.h) * l.w + col]);
                 }
                 mean = mean / l.c;
-                l.mean_input[(row) * l.w + col] = mean;
-                /*
-                for(int c = 0; c < l.c; c++){
-                    state.input[(row + c * l.h) * l.w + col] = state.input[(row + c * l.h) * l.w + col] > 0 ? 1 : -1;
-                }*/
+                assert(mean <= 1);
+                l.mean_input[(row + k_pad) * (l.w + 2 * k_pad) + col + k_pad] = mean;
+                if(state.train) {
+                    for (int c = 0; c < l.c; c++) {
+                        state.input[(row + c * l.h) * l.w + col] = state.input[(row + c * l.h) * l.w + col] > 0 ? mean : -mean;
+                    }
+                }
             }
         }
 
-        im2col_cpu(l.mean_input, 1, l.h, l.w,
-                   l.size, l.stride, 1, l.c_scales);
+        im2col_cpu(l.mean_input, 1, l.h + 2 * k_pad, l.w + 2 * k_pad,
+                   l.size, l.stride, 0, l.c_scales);
 
 #ifdef VIS
-        image im = float_to_image(out_w,out_h,1,c_scales);
+        image im = float_to_image(out_w, out_h, 1, l.c_scales);
+        image im_v = float_to_image(l.w + 2 * k_pad,l.h + 2 * k_pad, 1, l.mean_input);
         save_image(im, "/tmp/img.png");
+        save_image(im_v, "/tmp/img1.png");
+
 #endif
         fill_cpu(out_w * out_h, 0, l.c_norm, 1);
 
@@ -187,7 +215,7 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
         gemm(0,0,1,n,l.size*l.size,1,kfilters,l.size*l.size,l.c_scales,n,1,l.c_norm,n);
 
 #ifdef VIS
-        image im2 = float_to_image(out_w,out_h,1,c_norm);
+        image im2 = float_to_image(out_w,out_h,1,l.c_norm);
         save_image(im2, "/tmp/img2.png");
 #endif
 
@@ -199,42 +227,52 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
 #ifdef VERBOSE_T
         clock_t timeg=clock();
 #endif
+        //gemm(0,0,m,n,k,1,a,k,b,n,1,c,n);
         xnor_gemm_concat(l.filters_concat, b, c, m, n, k);
 
-#ifdef NUMERIC_TEST
-        float* c_check = calloc( m  * n, sizeof(float));
-        gemm(0,0,m,n,k,1,a,k,b,n,1,c_check,n);
-        for(int i = 0; i < m; i++ ){
+        for(int ii = 0; ii < m; ii++){
+            register float A_PART = fabs(a[ii*k]);
             for(int j = 0; j < n; j++) {
-                if( c_check[i * n + j] != c[i * n + j] ){
-                    printf("%d %d, %f, %f\n", i, j, c_check[i * n + j], c[i * n + j]);
-                    for(int  l = 0; l < k; l++){
-                        printf("%0.0f ", b[n * l + j]);
-                    }
-                    printf("\n");
-                    for(int  l = 0; l < k; l++){
-                        printf("%0.0f ", a[k * i + l]);
-                    }
-                }
-                //}
-                assert(c_check[i * n + j] == c[i * n + j]);
+                c[ii * n + j] *= (fabs(l.c_norm[j]) *  A_PART);
+                assert(!isinf(c[ii * n + j]));
             }
         }
+
+
+#ifdef NUMERIC_TEST
+        //float* c_check = calloc( m  * n, sizeof(float));
+        float* c_check2 = calloc( m  * n, sizeof(float));
+        gemm(0,0,m,n,k,1,a,k,b,n,1,c_check2,n);
+        //gemm_bin2(m, n, k, a, k, b, n, c_check, n);
+
+
+        for(int i = 0; i < m; i++ ){
+            for(int j = 0; j < n; j++) {
+
+                if( fabs(c[i * n + j] - c_check2[i * n + j] ) > 1e-4){
+                    printf("%d %d, %f, %f\n", i, j, c[i * n + j], c_check2[i * n + j]);
+                }
+                //assert(c_check[i * n + j] == c[i * n + j]);
+            }
+        }
+
+        image im3t = float_to_image(out_w,out_h,1,c_check2);
+        save_image(im3t, "/tmp/img3t.png");
+
 #endif
-        //gemm_bin2(m, n, k, a, k, b, n, c, n);
+
 #ifdef VERBOSE_T
         t_gemm += clock()-timeg;
 #endif
 
-        for(int ii = 0; ii < m; ++ii){
-            register float A_PART = a[ii*k];
-            for(int j = 0; j < n; ++j) {
-                c[ii * n + j] *= fabs(l.c_norm[j]) * fabs(A_PART);;
-                assert(!isinf(c[ii * n + j]));
-            }
-        }
+#ifdef VIS
+        image im3 = float_to_image(out_w,out_h,1,c);
+        save_image(im3, "/tmp/img3.png");
+#endif
+
         c += n*m;
         state.input += l.c*l.h*l.w;
+
     }
 
     if(l.batch_normalize){
@@ -249,9 +287,10 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
     }
 
 
+
     add_bias(l.output, l.biases, l.batch, l.n, out_h*out_w);
     activate_array(l.output, m*n*l.batch, l.activation);
-    if(state.train) {
+    if(state.train || 1) {
         swap_binary(&l);
     }
 
@@ -278,7 +317,7 @@ void backward_xnor_conv_layer(xnor_conv_layer l, network_state state)
     int k = convolutional_out_height(l)*
             convolutional_out_width(l);
 
-    lgradient_array(l.output, m*k*l.batch, l.activation, l.delta);
+    gradient_array(l.output, m*k*l.batch, l.activation, l.delta);
     backward_bias(l.bias_updates, l.delta, l.batch, l.n, k);
 
     for(i = 0; i < l.batch; ++i){
@@ -362,11 +401,18 @@ void load_xnor_conv_weights(layer l, FILE *fp)
         transpose_matrix(l.filters, l.c*l.size*l.size, l.n);
     }
     binarize_filters(l.filters, l.n, l.c*l.size*l.size, l.filters);
-    concatenate_rows_kernel_cpu(l.filters, l.filters_concat, l.n, l.size*l.size*l.c);
+
 #ifdef GPU
     if(gpu_index >= 0){
         push_convolutional_layer(l);
     }
+    binarize_filters_gpu(l.filters_gpu, l.n, l.c*l.size*l.size, l.binary_filters_gpu);
+    concatenate_rows_gpu(l.binary_filters_gpu, l.filters_concat, l.n, l.size*l.size*l.c);
+
+#else
+    swap_binary(&l);
+    concatenate_rows_kernel_cpu(l.filters, l.filters_concat, l.n, l.size*l.size*l.c);
+    swap_binary(&l);
 #endif
 }
 

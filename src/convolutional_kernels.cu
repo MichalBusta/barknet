@@ -33,7 +33,7 @@ __global__ void binarize_input_kernel(float *input, int n, int size, float *bina
     int i = 0;
     float mean = 0;
     for(i = 0; i < n; ++i){
-        mean += abs(input[i*size + s]);
+        mean += fabs(input[i*size + s]);
     }
     mean = mean / n;
     for(i = 0; i < n; ++i){
@@ -55,7 +55,7 @@ __global__ void binarize_filters_kernel(float *filters, int n, int size, float *
     int i = 0;
     float mean = 0;
     for(i = 0; i < size; ++i){
-        mean += abs(filters[f*size + i]);
+        mean += fabs(filters[f*size + i]);
     }
     mean = mean / size;
     for(i = 0; i < size; ++i){

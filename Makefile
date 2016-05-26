@@ -2,7 +2,7 @@
 GPU=1
 CUDNN=0
 OPENCV=1
-DEBUG=0
+DEBUG=1
 
 ARCH= --gpu-architecture=compute_30 --gpu-code=compute_30
 
@@ -15,7 +15,7 @@ NVCC=nvcc
 OPTS=-Ofast
 LDFLAGS= -lm -pthread 
 COMMON= 
-CFLAGS=-Wall -Wfatal-errors
+CFLAGS=-Wall -Wfatal-errors -msse4.2
 
 ifeq ($(DEBUG), 1) 
 OPTS=-O1 -g
