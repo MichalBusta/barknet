@@ -7,6 +7,7 @@
 #include "utils.h"
 #include "cuda.h"
 #include "blas.h"
+#include "connected_layer.h"
 
 #ifdef OPENCV
 #include "opencv2/highgui/highgui_c.h"
@@ -26,6 +27,7 @@ extern void run_vid_rnn(int argc, char **argv);
 extern void run_tag(int argc, char **argv);
 extern void run_cifar(int argc, char **argv);
 extern void run_go(int argc, char **argv);
+extern void run_art(int argc, char **argv);
 
 void change_rate(char *filename, float scale, float add)
 {
@@ -183,6 +185,25 @@ void denormalize_net(char *cfgfile, char *weightfile, char *outfile)
             denormalize_convolutional_layer(l);
             net.layers[i].batch_normalize=0;
         }
+        if (l.type == CONNECTED && l.batch_normalize) {
+            denormalize_connected_layer(l);
+            net.layers[i].batch_normalize=0;
+        }
+        if (l.type == GRU && l.batch_normalize) {
+            denormalize_connected_layer(*l.input_z_layer);
+            denormalize_connected_layer(*l.input_r_layer);
+            denormalize_connected_layer(*l.input_h_layer);
+            denormalize_connected_layer(*l.state_z_layer);
+            denormalize_connected_layer(*l.state_r_layer);
+            denormalize_connected_layer(*l.state_h_layer);
+            l.input_z_layer->batch_normalize = 0;
+            l.input_r_layer->batch_normalize = 0;
+            l.input_h_layer->batch_normalize = 0;
+            l.state_z_layer->batch_normalize = 0;
+            l.state_r_layer->batch_normalize = 0;
+            l.state_h_layer->batch_normalize = 0;
+            net.layers[i].batch_normalize=0;
+        }
     }
     save_weights(net, outfile);
 }
@@ -240,6 +261,8 @@ int main(int argc, char **argv)
         run_coco(argc, argv);
     } else if (0 == strcmp(argv[1], "classifier")){
         run_classifier(argc, argv);
+    } else if (0 == strcmp(argv[1], "art")){
+        run_art(argc, argv);
     } else if (0 == strcmp(argv[1], "tag")){
         run_tag(argc, argv);
     } else if (0 == strcmp(argv[1], "compare")){

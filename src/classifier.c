@@ -3,6 +3,7 @@
 #include "parser.h"
 #include "option_list.h"
 #include "blas.h"
+#include "classifier.h"
 #include <sys/time.h>
 
 #ifdef OPENCV
@@ -49,7 +50,8 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile)
         load_weights(&net, weightfile);
     }
     printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net.learning_rate, net.momentum, net.decay);
-    int imgs = 64;
+
+    int imgs = net.batch;
 
     list *options = read_data_cfg(datacfg);
 
@@ -73,7 +75,7 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile)
     args.h = net.h;
     args.c = net.c;
 
-    args.min = net.w;
+    args.min = net.min_crop;
     args.max = net.max_crop;
     args.size = net.w;
 

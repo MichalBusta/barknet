@@ -8,6 +8,7 @@
 
 #include "crop_layer.h"
 #include "connected_layer.h"
+#include "gru_layer.h"
 #include "rnn_layer.h"
 #include "crnn_layer.h"
 #include "local_layer.h"
@@ -16,6 +17,7 @@
 #include "deconvolutional_layer.h"
 #include "detection_layer.h"
 #include "normalization_layer.h"
+#include "batchnorm_layer.h"
 #include "maxpool_layer.h"
 #include "avgpool_layer.h"
 #include "cost_layer.h"
@@ -64,6 +66,8 @@ float get_current_rate(network net)
             return net.learning_rate * pow(net.gamma, batch_num);
         case POLY:
             return net.learning_rate * pow(1 - (float)batch_num / net.max_batches, net.power);
+        case RANDOM:
+            return net.learning_rate * pow(rand_uniform(0,1), net.power);
         case SIG:
             return net.learning_rate * (1./(1.+exp(net.gamma*(batch_num - net.step))));
         default:
@@ -87,6 +91,8 @@ char *get_layer_string(LAYER_TYPE a)
             return "connected";
         case RNN:
             return "rnn";
+        case GRU:
+            return "gru";
         case CRNN:
             return "crnn";
         case MAXPOOL:
@@ -111,6 +117,8 @@ char *get_layer_string(LAYER_TYPE a)
             return "normalization";
         case XNOR_CONV:
         	return "xnor-conv";
+        case BATCHNORM:
+            return "batchnorm";
         default:
             break;
     }
@@ -149,12 +157,16 @@ void forward_network(network net, network_state state)
             forward_local_layer(l, state);
         } else if(l.type == NORMALIZATION){
             forward_normalization_layer(l, state);
+        } else if(l.type == BATCHNORM){
+            forward_batchnorm_layer(l, state);
         } else if(l.type == DETECTION){
             forward_detection_layer(l, state);
         } else if(l.type == CONNECTED){
             forward_connected_layer(l, state);
         } else if(l.type == RNN){
             forward_rnn_layer(l, state);
+        } else if(l.type == GRU){
+            forward_gru_layer(l, state);
         } else if(l.type == CRNN){
             forward_crnn_layer(l, state);
         } else if(l.type == CROP){
@@ -195,6 +207,8 @@ void update_network(network net)
             update_connected_layer(l, update_batch, rate, net.momentum, net.decay);
         } else if(l.type == RNN){
             update_rnn_layer(l, update_batch, rate, net.momentum, net.decay);
+        } else if(l.type == GRU){
+            update_gru_layer(l, update_batch, rate, net.momentum, net.decay);
         } else if(l.type == CRNN){
             update_crnn_layer(l, update_batch, rate, net.momentum, net.decay);
         } else if(l.type == LOCAL){
@@ -207,6 +221,9 @@ void update_network(network net)
 
 float *get_network_output(network net)
 {
+    #ifdef GPU
+        return get_network_output_gpu(net);
+    #endif 
     int i;
     for(i = net.n-1; i > 0; --i) if(net.layers[i].type != COST) break;
     return net.layers[i].output;
@@ -261,6 +278,8 @@ void backward_network(network net, network_state state)
             backward_activation_layer(l, state);
         } else if(l.type == NORMALIZATION){
             backward_normalization_layer(l, state);
+        } else if(l.type == BATCHNORM){
+            backward_batchnorm_layer(l, state);
         } else if(l.type == MAXPOOL){
             if(i != 0) backward_maxpool_layer(l, state);
         } else if(l.type == AVGPOOL){
@@ -275,6 +294,8 @@ void backward_network(network net, network_state state)
             backward_connected_layer(l, state);
         } else if(l.type == RNN){
             backward_rnn_layer(l, state);
+        } else if(l.type == GRU){
+            backward_gru_layer(l, state);
         } else if(l.type == CRNN){
             backward_crnn_layer(l, state);
         } else if(l.type == LOCAL){

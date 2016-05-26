@@ -16,6 +16,7 @@ extern "C" {
 #include "crop_layer.h"
 #include "connected_layer.h"
 #include "rnn_layer.h"
+#include "gru_layer.h"
 #include "crnn_layer.h"
 #include "detection_layer.h"
 #include "convolutional_layer.h"
@@ -24,6 +25,7 @@ extern "C" {
 #include "maxpool_layer.h"
 #include "avgpool_layer.h"
 #include "normalization_layer.h"
+#include "batchnorm_layer.h"
 #include "cost_layer.h"
 #include "local_layer.h"
 #include "softmax_layer.h"
@@ -40,6 +42,7 @@ float * get_network_output_gpu(network net);
 
 void forward_network_gpu(network net, network_state state)
 {
+    state.workspace = net.workspace;
     int i;
     for(i = 0; i < net.n; ++i){
         state.index = i;
@@ -61,6 +64,8 @@ void forward_network_gpu(network net, network_state state)
             forward_connected_layer_gpu(l, state);
         } else if(l.type == RNN){
             forward_rnn_layer_gpu(l, state);
+        } else if(l.type == GRU){
+            forward_gru_layer_gpu(l, state);
         } else if(l.type == CRNN){
             forward_crnn_layer_gpu(l, state);
         } else if(l.type == CROP){
@@ -71,6 +76,8 @@ void forward_network_gpu(network net, network_state state)
             forward_softmax_layer_gpu(l, state);
         } else if(l.type == NORMALIZATION){
             forward_normalization_layer_gpu(l, state);
+        } else if(l.type == BATCHNORM){
+            forward_batchnorm_layer_gpu(l, state);
         } else if(l.type == MAXPOOL){
             forward_maxpool_layer_gpu(l, state);
         } else if(l.type == AVGPOOL){
@@ -90,6 +97,7 @@ void forward_network_gpu(network net, network_state state)
 
 void backward_network_gpu(network net, network_state state)
 {
+    state.workspace = net.workspace;
     int i;
     float * original_input = state.input;
     float * original_delta = state.delta;
@@ -122,12 +130,16 @@ void backward_network_gpu(network net, network_state state)
             backward_detection_layer_gpu(l, state);
         } else if(l.type == NORMALIZATION){
             backward_normalization_layer_gpu(l, state);
+        } else if(l.type == BATCHNORM){
+            backward_batchnorm_layer_gpu(l, state);
         } else if(l.type == SOFTMAX){
             if(i != 0) backward_softmax_layer_gpu(l, state);
         } else if(l.type == CONNECTED){
             backward_connected_layer_gpu(l, state);
         } else if(l.type == RNN){
             backward_rnn_layer_gpu(l, state);
+        } else if(l.type == GRU){
+            backward_gru_layer_gpu(l, state);
         } else if(l.type == CRNN){
             backward_crnn_layer_gpu(l, state);
         } else if(l.type == COST){
@@ -155,6 +167,8 @@ void update_network_gpu(network net)
             update_deconvolutional_layer_gpu(l, rate, net.momentum, net.decay);
         } else if(l.type == CONNECTED){
             update_connected_layer_gpu(l, update_batch, rate, net.momentum, net.decay);
+        } else if(l.type == GRU){
+            update_gru_layer_gpu(l, update_batch, rate, net.momentum, net.decay);
         } else if(l.type == RNN){
             update_rnn_layer_gpu(l, update_batch, rate, net.momentum, net.decay);
         } else if(l.type == CRNN){
