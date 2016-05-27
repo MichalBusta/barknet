@@ -113,8 +113,6 @@ void concatenate_cols_gpu(float *a, unsigned int *b, int rows, int cols)
     cudaDeviceSynchronize();
 }
 
-//#define NUMERIC_TEST 1
-
 /**
  * A is shape (m,k), B is shape (k,n) and C is shape (m,n)
  */
@@ -134,65 +132,6 @@ void xnor_gemm_concat_gpu(unsigned int* AT, float* B, float* C, int m, int n, in
     xnor_gemm_impl_gpu<<<cuda_gridsize(size), BLOCK>>>(AT, bt, C, m, n, k_red, a, c_norm, k);
     cudaDeviceSynchronize();
 
-#ifdef NUMERIC_TEST
-
-    float* b_pull = (float *) calloc( k * n, sizeof(float));
-    status = cudaMemcpy(b_pull, B, k * n * sizeof(float), cudaMemcpyDeviceToHost);
-    check_error(status);
-
-    unsigned  int* b_check = (unsigned  int *) calloc( n * k_red, sizeof(unsigned int));
-    concatenate_cols_kernel_cpu(b_pull, b_check,  k, n);
-
-    unsigned  int* b_check_cuda = (unsigned  int *) calloc( n * k_red, sizeof(unsigned int));
-    status = cudaMemcpy(b_check_cuda, bt,  n * k_red * sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    check_error(status);
-
-    for(int j = 0; j < n * k_red; j++ ){
-        if( b_check_cuda[j] != b_check[j]  )
-        {
-            printf("b_check: %d, %f, %f\n", j, b_check_cuda[j], b_check[j]);
-        }
-        assert(b_check_cuda[j] == b_check[j]);
-    }
-
-
-    float* c_check_cuda = (float *) calloc( n * m, sizeof(float));
-    status = cudaMemcpy(c_check_cuda, C,  n * m * sizeof(float), cudaMemcpyDeviceToHost);
-    check_error(status);
-
-    unsigned  int* filters_concat = (unsigned int *) calloc( m * k_red, sizeof(unsigned int *));
-    status = cudaMemcpy(filters_concat, AT,  m * k_red * sizeof(float), cudaMemcpyDeviceToHost);
-    check_error(status);
-
-    float* c = (float *) calloc( n * m, sizeof(float));
-    xnor_gemm_impl(filters_concat, b_check, c, m, n, k_red, k);
-
-    float* c_norm_check =  (float *) calloc( n, sizeof(float));
-    status = cudaMemcpy(c_norm_check, c_norm,  n * sizeof(float), cudaMemcpyDeviceToHost);
-    check_error(status);
-
-    float* a_check =  (float *) calloc( m * k, sizeof(float));
-    status = cudaMemcpy(a_check, a,  m * k * sizeof(float), cudaMemcpyDeviceToHost);
-    check_error(status);
-
-    for(int ii = 0; ii < m; ii++){
-        register float A_PART = fabs(a_check[ii*k]);
-        for(int j = 0; j < n; j++) {
-            //c[ii * n + j] *= (fabs(c_norm_check[j]) *  A_PART);
-            assert(c[ii * n + j] != c_check_cuda[ii * n + j] );
-            assert(!isinf(c[ii * n + j]));
-        }
-    }
-
-    free(b_pull);
-    free(b_check_cuda);
-    free(c_check_cuda);
-    free(filters_concat);
-    free(c);
-    free(c_norm_check);
-
-#endif //NUMERIC_TEST
-
 #ifdef VERBOSE_T
     printf(" gemmimpl: %lf sec\n", sec(clock()-timeg));
 #endif
@@ -210,33 +149,11 @@ void forward_xnor_conv_layer_gpu(xnor_conv_layer l, network_state state)
 
     fill_ongpu(l.outputs*l.batch, 0, l.output_gpu, 1);
 
-    binarize_filters_gpu(l.filters_gpu, l.n, l.c*l.size*l.size, l.binary_filters_gpu);
-    swap_binary(&l);
-    concatenate_rows_gpu(l.filters_gpu, l.filters_concat, l.n, l.size*l.size*l.c);
-
-#ifdef NUMERIC_TEST
-    //test if filters are same
-
-    int k_red = k / 32;
-    if( k > k_red * 32 )
-        k_red += 1;
-    unsigned  int* s_concat = (unsigned  int *) calloc( m  * k_red, sizeof(unsigned int));
-    concatenate_rows_kernel_cpu(l.binary_filters, s_concat, l.n, l.size*l.size*l.c);
-
-    unsigned  int* cuda_concat = (unsigned  int *) calloc( m  * k_red, sizeof(unsigned int));
-    size_t pull_size = m  * k_red * sizeof(unsigned int);
-    cudaError_t status = cudaMemcpy(cuda_concat, l.filters_concat, pull_size, cudaMemcpyDeviceToHost);
-    check_error(status);
-
-    for(size_t j = 0; j < m  * k_red; j++){
-        if( s_concat[j] !=  cuda_concat[j] ){
-            printf("%d, %d, %d \n", j, s_concat[j], cuda_concat[j]);
-        }
-        assert(s_concat[j] ==  cuda_concat[j]);
+    if(state.train) {
+        binarize_filters_gpu(l.filters_gpu, l.n, l.c * l.size * l.size, l.binary_filters_gpu);
+        swap_binary(&l);
+        concatenate_rows_gpu(l.filters_gpu, l.filters_concat, l.n, l.size * l.size * l.c);
     }
-    free(s_concat);
-    free(cuda_concat);
-#endif
 
     int k_red = k / 32;
     if ( k % 32 > 0 )
@@ -281,7 +198,9 @@ void forward_xnor_conv_layer_gpu(xnor_conv_layer l, network_state state)
     add_bias_gpu(l.output_gpu, l.biases_gpu, l.batch, l.n, n);
 
     activate_array_ongpu(l.output_gpu, m*n*l.batch, l.activation);
-    swap_binary(&l);
+    if(state.train) {
+        swap_binary(&l);
+    }
 }
 
 void backward_xnor_conv_layer_gpu(xnor_conv_layer l, network_state state)

@@ -147,7 +147,7 @@ xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int 
 
 //#define VERBOSE_T
 //#define NUMERIC_TEST 1
-#define VIS 1
+//#define VIS 1
 
 void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
 {
@@ -177,9 +177,6 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
     float *b = l.col_image;
     float *c = l.output;
 
-    int k_pad = 0;
-    if(l.pad)
-        k_pad = l.size / 2;
     for(i = 0; i < l.batch; ++i){
         #pragma omp parallel for
         for(int row = 0; row < l.h; row++){
@@ -190,7 +187,7 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
                 }
                 mean = mean / l.c;
                 assert(mean <= 1);
-                l.mean_input[(row + k_pad) * (l.w + 2 * k_pad) + col + k_pad] = mean;
+                l.mean_input[row * l.w + col] = mean;
                 if(state.train) {
                     for (int c = 0; c < l.c; c++) {
                         state.input[(row + c * l.h) * l.w + col] = state.input[(row + c * l.h) * l.w + col] > 0 ? mean : -mean;
@@ -199,12 +196,12 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
             }
         }
 
-        im2col_cpu(l.mean_input, 1, l.h + 2 * k_pad, l.w + 2 * k_pad,
-                   l.size, l.stride, 0, l.c_scales);
+        im2col_cpu(l.mean_input, 1, l.h, l.w,
+                   l.size, l.stride, l.pad, l.c_scales);
 
 #ifdef VIS
         image im = float_to_image(out_w, out_h, 1, l.c_scales);
-        image im_v = float_to_image(l.w + 2 * k_pad,l.h + 2 * k_pad, 1, l.mean_input);
+        image im_v = float_to_image(l.w,l.h, 1, l.mean_input);
         save_image(im, "/tmp/img.png");
         save_image(im_v, "/tmp/img1.png");
 
@@ -400,7 +397,6 @@ void load_xnor_conv_weights(layer l, FILE *fp)
     if (l.flipped) {
         transpose_matrix(l.filters, l.c*l.size*l.size, l.n);
     }
-    binarize_filters(l.filters, l.n, l.c*l.size*l.size, l.filters);
 
 #ifdef GPU
     if(gpu_index >= 0){
@@ -410,6 +406,8 @@ void load_xnor_conv_weights(layer l, FILE *fp)
     concatenate_rows_gpu(l.binary_filters_gpu, l.filters_concat, l.n, l.size*l.size*l.c);
 
 #else
+
+    binarize_filters(l.filters, l.n, l.c * l.size * l.size, l.binary_filters);
     swap_binary(&l);
     concatenate_rows_kernel_cpu(l.filters, l.filters_concat, l.n, l.size*l.size*l.c);
     swap_binary(&l);
