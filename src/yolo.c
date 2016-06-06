@@ -14,7 +14,7 @@ image voc_labels[20];
 
 void train_yolo(char *cfgfile, char *weightfile)
 {
-    char *train_images = "/home/busta/data/COCO/train.txt";
+    char *train_images = "/home/busta/data/VOC/2012_train.txt";
     char *backup_directory = "/home/busta/backup/";
     srand(time(0));
     data_seed = time(0);
@@ -73,7 +73,7 @@ void train_yolo(char *cfgfile, char *weightfile)
 
         printf("%d: %f, %f avg, %f rate, %lf seconds, %d images\n", i, loss, avg_loss, get_current_rate(net), sec(clock()-time), i*imgs);
 
-        if(i%1000==0 || (i < 1000 && i%100 == 0)){
+        if(i%100==0 || (i < 1000 && i%100 == 0)){
             char buff[256];
             sprintf(buff, "%s/%s_%d.weights", backup_directory, base, i);
             save_weights(net, buff);

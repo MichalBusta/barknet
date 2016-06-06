@@ -559,7 +559,7 @@ __global__ void smooth_l1_kernel(int n, float *pred, float *truth, float *delta,
     int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if(i < n){
         float diff = truth[i] - pred[i];
-        float abs_val = abs(diff);
+        float abs_val = fabs(diff);
         if(abs_val < 1) {
             error[i] = diff * diff;
             delta[i] = diff;

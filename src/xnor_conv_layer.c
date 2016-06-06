@@ -11,10 +11,6 @@
 #include "xnor_conv_layer.h"
 #include "xnor_gemm.h"
 
-#pragma GCC push_options
-#pragma GCC optimize ("O0")
-
-
 xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int size, int stride, int pad, ACTIVATION activation, int batch_normalize, int binary)
 {
     int i;
@@ -126,7 +122,7 @@ xnor_conv_layer make_xnor_conv_layer(int batch, int h, int w, int c, int n, int 
     }
 #else
     l.mean_input = calloc(( l.h + 2 *  kpad ) * (l.w + 2 * kpad), sizeof(float));
-    l.c_scales = malloc(out_h * out_w * size* size *sizeof(float));
+    l.c_scales = malloc(out_h * out_w * size * size *sizeof(float));
     l.c_norm= calloc(out_w * out_h, sizeof(float));
 
     l.filters_norm = malloc(n*l.size*l.size*sizeof(float));
@@ -186,7 +182,6 @@ void forward_xnor_conv_layer(xnor_conv_layer l, network_state state)
                     mean += fabs(state.input[(row + c * l.h) * l.w + col]);
                 }
                 mean = mean / l.c;
-                assert(mean <= 1);
                 l.mean_input[row * l.w + col] = mean;
                 if(state.train) {
                     for (int c = 0; c < l.c; c++) {
@@ -414,4 +409,3 @@ void load_xnor_conv_weights(layer l, FILE *fp)
 #endif
 }
 
-#pragma GCC pop_options
