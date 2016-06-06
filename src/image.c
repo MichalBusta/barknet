@@ -1057,13 +1057,80 @@ image collapse_images_horz(image *ims, int n)
     return filters;
 } 
 
-    void show_image_normalized(image im, const char *name)
-    {
-        image c = copy_image(im);
-        normalize_image(c);
-        show_image(c, name);
+void show_image_normalized(image im, const char *name)
+{
+    image c = copy_image(im);
+    normalize_image(c);
+    show_image(c, name);
+    free_image(c);
+}
+
+int best_3d_shift_r(image a, image b, int min, int max)
+{
+    if(min == max) return min;
+    int mid = floor((min + max) / 2.);
+    image c1 = crop_image(b, 0, mid, b.w, b.h);
+    image c2 = crop_image(b, 0, mid+1, b.w, b.h);
+    float d1 = dist_array(c1.data, a.data, a.w*a.h*a.c, 10);
+    float d2 = dist_array(c2.data, a.data, a.w*a.h*a.c, 10);
+    free_image(c1);
+    free_image(c2);
+    if(d1 < d2) return best_3d_shift_r(a, b, min, mid);
+    else return best_3d_shift_r(a, b, mid+1, max);
+}
+
+int best_3d_shift(image a, image b, int min, int max)
+{
+    int i;
+    int best = 0;
+    float best_distance = FLT_MAX;
+    for(i = min; i <= max; i += 2){
+        image c = crop_image(b, 0, i, b.w, b.h);
+        float d = dist_array(c.data, a.data, a.w*a.h*a.c, 100);
+        if(d < best_distance){
+            best_distance = d;
+            best = i;
+        }
+        printf("%d %f\n", i, d);
         free_image(c);
     }
+    return best;
+}
+
+void composite_3d(char *f1, char *f2, char *out)
+{
+    if(!out) out = "out";
+    image a = load_image(f1, 0,0,0);
+    image b = load_image(f2, 0,0,0);
+    int shift = best_3d_shift_r(a, b, -a.h/100, a.h/100);
+
+    image c1 = crop_image(b, 10, shift, b.w, b.h);
+    float d1 = dist_array(c1.data, a.data, a.w*a.h*a.c, 100);
+    image c2 = crop_image(b, -10, shift, b.w, b.h);
+    float d2 = dist_array(c2.data, a.data, a.w*a.h*a.c, 100);
+
+    if(d2 < d1){
+        image swap = a;
+        a = b;
+        b = swap;
+        shift = -shift;
+        printf("swapped, %d\n", shift);
+    }
+    else{
+        printf("%d\n", shift);
+    }
+
+    image c = crop_image(b, 0, shift, a.w, a.h);
+    int i;
+    for(i = 0; i < c.w*c.h; ++i){
+        c.data[i] = a.data[i];
+    }
+#ifdef OPENCV
+    save_image_jpg(c, out);
+#else
+    save_image(c, out);
+#endif
+}
 
 void show_images(image *ims, int n, char *window)
 {
